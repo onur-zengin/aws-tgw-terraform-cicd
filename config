@@ -1,5 +1,0 @@
-Host github
-  HostName github.com
-  User onur.zengin
-  IdentityFile /Users/onurzengin/.ssh/id_rsa.pub
-  IdentitiesOnly yes
