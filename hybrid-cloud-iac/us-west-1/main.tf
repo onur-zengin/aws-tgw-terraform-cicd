@@ -1,3 +1,7 @@
+provider "aws" {
+  region = "us-west-1"
+}
+
 resource "aws_vpc" "us-west-1" {
   #cidr_block = "10.0.0.0/24"
   ipv4_ipam_pool_id   = var.pool
