@@ -61,9 +61,18 @@ resource "aws_vpc_ipam_pool_cidr" "root_block" {
   cidr         = "10.0.0.0/8"
 }
 
+resource "aws_vpc_ipam_pool" "us-east-1" {
+  address_family      = "ipv4"
+  ipam_scope_id       = aws_vpc_ipam.main.private_default_scope_id
+  description         = "us-east-1"
+  locale              = "us-east-1"
+  source_ipam_pool_id = aws_vpc_ipam_pool.root.id
+}
+
 resource "aws_vpc_ipam_pool" "us-west-1" {
   address_family      = "ipv4"
   ipam_scope_id       = aws_vpc_ipam.main.private_default_scope_id
+  description         = "us-west-1"
   locale              = "us-west-1"
   source_ipam_pool_id = aws_vpc_ipam_pool.root.id
 }
@@ -71,28 +80,50 @@ resource "aws_vpc_ipam_pool" "us-west-1" {
 resource "aws_vpc_ipam_pool" "eu-west-2" {
   address_family      = "ipv4"
   ipam_scope_id       = aws_vpc_ipam.main.private_default_scope_id
+  description         = "eu-west-2"
   locale              = "eu-west-2"
   source_ipam_pool_id = aws_vpc_ipam_pool.root.id
 }
 
+# In order to deprovision CIDRs all Allocations must be released. 
+# Allocations created by a VPC take up to 30 minutes to be released.
+
+resource "aws_vpc_ipam_pool_cidr" "us-east-1_block" {
+  ipam_pool_id = aws_vpc_ipam_pool.us-east-1.id
+  cidr         = "10.0.0.0/12"
+}
+
 resource "aws_vpc_ipam_pool_cidr" "us-west-1_block" {
   ipam_pool_id = aws_vpc_ipam_pool.us-west-1.id
-  cidr         = "10.0.0.0/15"
+  cidr         = "10.16.0.0/12"
 }
 
 resource "aws_vpc_ipam_pool_cidr" "eu-west-2_block" {
   ipam_pool_id = aws_vpc_ipam_pool.eu-west-2.id
-  cidr         = "10.2.0.0/15"
+  cidr         = "10.32.0.0/12"
 }
 
 module "California" {
-  source = "./us-west-1"
-  pool   = aws_vpc_ipam_pool.us-west-1.id
-  cidr   = aws_vpc_ipam_pool_cidr.us-west-1_block.cidr
+  source     = "./us-west-1"
+  pool_id    = aws_vpc_ipam_pool.us-west-1.id
+  cidr_block = aws_vpc_ipam_pool_cidr.us-west-1_block
 }
 
 module "London" {
-  source = "./eu-west-2"
-  pool   = aws_vpc_ipam_pool.eu-west-2.id
-  cidr   = aws_vpc_ipam_pool_cidr.eu-west-2_block.cidr
+  source     = "./eu-west-2"
+  pool_id    = aws_vpc_ipam_pool.eu-west-2.id
+  cidr_block = aws_vpc_ipam_pool_cidr.eu-west-2_block
+}
+
+
+
+
+
+
+resource "aws_vpc" "us-east-1_test" {
+  ipv4_ipam_pool_id   = aws_vpc_ipam_pool.us-east-1.id
+  ipv4_netmask_length = 28 // You can't assign anything smaller than 28. AWS reserves 5 in each VPC.
+  depends_on = [
+    aws_vpc_ipam_pool_cidr.us-east-1_block
+  ]
 }
