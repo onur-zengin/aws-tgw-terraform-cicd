@@ -9,3 +9,11 @@ resource "aws_vpc" "us-west-1-vpc-1" {
     var.cidr
   ]
 }
+
+resource "aws_vpc" "us-west-1-vpc-2" {
+  ipv4_ipam_pool_id   = var.pool
+  ipv4_netmask_length = 24
+  depends_on = [
+    var.cidr
+  ]
+}

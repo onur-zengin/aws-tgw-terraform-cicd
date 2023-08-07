@@ -1,3 +1,12 @@
+# w/out a provider region definition here, the child module would inherit the working region (us-east-1) from root
 provider "aws" {
   region = "eu-west-2"
+}
+
+resource "aws_vpc" "eu-west-2-vpc-1" {
+  ipv4_ipam_pool_id   = var.pool
+  ipv4_netmask_length = 16
+  depends_on = [
+    var.cidr
+  ]
 }
