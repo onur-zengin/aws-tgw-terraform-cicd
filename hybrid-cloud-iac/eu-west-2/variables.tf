@@ -7,7 +7,3 @@ variable "cidr_block" {
   description = "IPAM CIDR Block Object"
 }
 
-variable "connection_id" {
-  description = "VPC connection ID"
-  type = string
-}
