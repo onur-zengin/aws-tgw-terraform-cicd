@@ -110,13 +110,11 @@ module "California" {
 }
 
 module "London" {
-  source     = "./eu-west-2"
-  pool_id    = aws_vpc_ipam_pool.eu-west-2.id
-  cidr_block = aws_vpc_ipam_pool_cidr.eu-west-2_block
+  source        = "./eu-west-2"
+  pool_id       = aws_vpc_ipam_pool.eu-west-2.id
+  cidr_block    = aws_vpc_ipam_pool_cidr.eu-west-2_block
+  connection_id = aws_vpc_peering_connection.foo.id
 }
-
-
-
 
 
 
@@ -127,3 +125,15 @@ resource "aws_vpc" "us-east-1_test" {
     aws_vpc_ipam_pool_cidr.us-east-1_block
   ]
 }
+
+resource "aws_vpc_peering_connection" "foo" {
+  vpc_id      = aws_vpc.us-east-1_test.id
+  peer_vpc_id = module.London.vpc-1_id
+  peer_region = "eu-west-2"
+  auto_accept = false // If both VPCs are not in the same AWS account and region do not enable the auto_accept attribute. The accepter can manage its side of the connection using the aws_vpc_peering_connection_accepter resource. 
+
+  tags = {
+    Side = "Requester"
+  }
+}
+
