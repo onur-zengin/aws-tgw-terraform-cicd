@@ -6,3 +6,4 @@ variable "pool_id" {
 variable "cidr_block" {
   description = "IPAM CIDR Block Object"
 }
+

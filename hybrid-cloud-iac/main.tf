@@ -114,16 +114,3 @@ module "London" {
   pool_id    = aws_vpc_ipam_pool.eu-west-2.id
   cidr_block = aws_vpc_ipam_pool_cidr.eu-west-2_block
 }
-
-
-
-
-
-
-resource "aws_vpc" "us-east-1_test" {
-  ipv4_ipam_pool_id   = aws_vpc_ipam_pool.us-east-1.id
-  ipv4_netmask_length = 28 // You can't assign anything smaller than 28. AWS reserves 5 in each VPC.
-  depends_on = [
-    aws_vpc_ipam_pool_cidr.us-east-1_block
-  ]
-}
