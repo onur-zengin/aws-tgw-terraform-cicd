@@ -26,7 +26,8 @@ provider "awscc" {
   region = "us-east-1"
 }
 
-data "aws_region" "current" {}
+data "aws_region" "current" {
+}
 
 locals {
   # ensure current provider region is an operating_regions entry
@@ -113,4 +114,8 @@ module "London" {
   source     = "./eu-west-2"
   pool_id    = aws_vpc_ipam_pool.eu-west-2.id
   cidr_block = aws_vpc_ipam_pool_cidr.eu-west-2_block
+}
+
+output "Cali_AZs" {
+  value = module.California.az
 }
