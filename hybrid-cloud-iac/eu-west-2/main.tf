@@ -108,7 +108,7 @@ resource "aws_route_table" "privateRouteTable" {
   vpc_id = aws_vpc.eu-west-2-vpc-1.id // this puts the VPC CIDR as local in the route-table, even w/out any subnet association
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = var.peering_to_nca.id
+    vpc_peering_connection_id = var.peering_to_nca.id
   }
   tags = {
     Name = "tf-prv"
