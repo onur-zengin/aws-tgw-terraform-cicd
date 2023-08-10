@@ -86,7 +86,7 @@ resource "aws_route_table" "privateRouteTable" {
   vpc_id = aws_vpc.us-west-1-vpc-1.id 
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = var.peering_to_lon.id
+    vpc_peering_connection_id = var.peering_to_lon.id
   }
   tags = {
     Name = "tf-prv-vpc-1"

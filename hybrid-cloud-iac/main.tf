@@ -15,6 +15,10 @@ terraform {
       source  = "hashicorp/awscc"
       version = "~> 0.57"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.5"
+    }
   }
 }
 
@@ -86,6 +90,14 @@ resource "aws_vpc_ipam_pool" "eu-west-2" {
   source_ipam_pool_id = aws_vpc_ipam_pool.root.id
 }
 
+resource "aws_vpc_ipam_pool" "eu-west-1" {
+  address_family      = "ipv4"
+  ipam_scope_id       = aws_vpc_ipam.main.private_default_scope_id
+  description         = "eu-west-1"
+  locale              = "eu-west-1"
+  source_ipam_pool_id = aws_vpc_ipam_pool.root.id
+}
+
 # In order to deprovision CIDRs all Allocations must be released. 
 # Allocations created by a VPC take up to 30 minutes to be released.
 
@@ -104,6 +116,12 @@ resource "aws_vpc_ipam_pool_cidr" "eu-west-2_block" {
   cidr         = "10.32.0.0/12"
 }
 
+
+resource "aws_vpc_ipam_pool_cidr" "eu-west-1_block" {
+  ipam_pool_id = aws_vpc_ipam_pool.eu-west-1.id
+  cidr         = "10.48.0.0/12"
+}
+
 module "California" {
   source     = "./us-west-1"
   pool_id    = aws_vpc_ipam_pool.us-west-1.id
@@ -118,3 +136,12 @@ module "London" {
   peering_to_nca = aws_vpc_peering_connection.foo2
 }
 
+module "Dublin" {
+  source     = "./eu-west-1"
+  pool_id    = aws_vpc_ipam_pool.eu-west-1.id
+  cidr_block = aws_vpc_ipam_pool_cidr.eu-west-1_block
+}
+
+output "test_output" {
+  value = module.Dublin.test_output
+}
