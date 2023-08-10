@@ -41,7 +41,7 @@ resource "aws_subnet" "prvSubnets" {
 
 resource "aws_ec2_transit_gateway_vpc_attachment" "tgwAttachments" {
   for_each           = { for k, v in aws_subnet.prvSubnets : k => v } // potential fixme - retest this with multiple subnets in a VPC
-  subnet_ids = [each.value.id]
+  subnet_ids         = [each.value.id]
   transit_gateway_id = aws_ec2_transit_gateway.tgw.id
   vpc_id             = each.value.vpc_id
 }
