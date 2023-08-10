@@ -108,11 +108,13 @@ module "California" {
   source     = "./us-west-1"
   pool_id    = aws_vpc_ipam_pool.us-west-1.id
   cidr_block = aws_vpc_ipam_pool_cidr.us-west-1_block
+  peering_to_lon = aws_vpc_peering_connection.foo2
 }
 
 module "London" {
   source     = "./eu-west-2"
   pool_id    = aws_vpc_ipam_pool.eu-west-2.id
   cidr_block = aws_vpc_ipam_pool_cidr.eu-west-2_block
+  peering_to_nca = aws_vpc_peering_connection.foo2
 }
 

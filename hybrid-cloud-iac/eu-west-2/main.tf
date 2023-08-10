@@ -4,6 +4,13 @@ provider "aws" {
   region = "eu-west-2"
 }
 
+locals {
+  pubSgPorts = [22]
+  prvSgPorts = [22, 80, 443, 3306]
+  prvCidrBlocks = ["10.0.0.0/8"]
+  theInternet = ["0.0.0.0/0"]
+}
+
 # collect the available AZs and the most recent AMI for the region that are required for the VPCs and EC2 instances, respectively
 data "aws_availability_zones" "available" {
   state = "available"
@@ -99,12 +106,10 @@ resource "aws_route_table" "publicRouteTable" {
 
 resource "aws_route_table" "privateRouteTable" {
   vpc_id = aws_vpc.eu-west-2-vpc-1.id // this puts the VPC CIDR as local in the route-table, even w/out any subnet association
-  /*
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.igw.id
+    gateway_id = var.peering_to_nca.id
   }
-*/
   tags = {
     Name = "tf-prv"
   }
@@ -155,11 +160,6 @@ resource "aws_eip" "persistent_ip" {     // persistent public ip for the bastion
 
 
 
-locals {
-  sgPorts = [22]
-  prvCidrBlocks = ["10.0.0.0/8"]
-  theInternet = ["0.0.0.0/0"]
-}
 
 resource "aws_security_group" "public_sg" { 
     name = "inet-ssh-access"  // Must be unique within a VPC
@@ -167,7 +167,7 @@ resource "aws_security_group" "public_sg" {
 
     dynamic "ingress" {
         iterator = port
-        for_each = local.sgPorts
+        for_each = local.pubSgPorts
         content {
             from_port = port.value
             to_port = port.value
@@ -196,7 +196,7 @@ resource "aws_security_group" "private_sg" {
 
     dynamic "ingress" {
         iterator = port
-        for_each = local.sgPorts
+        for_each = local.prvSgPorts
         content {
             from_port = port.value
             to_port = port.value
@@ -205,12 +205,12 @@ resource "aws_security_group" "private_sg" {
         }
     }
 
-# accept ICMP type 8 (echo request) from trusted ranges
+# accept ICMP type 8 (echo request) from private ranges
     ingress {
         from_port = 8
         to_port = 0
         protocol = "1"
-        security_groups = [ aws_security_group.public_sg.id ]
+        cidr_blocks = local.prvCidrBlocks
     }
 
     egress {

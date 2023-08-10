@@ -6,3 +6,7 @@ variable "pool_id" {
 variable "cidr_block" {
   description = "IPAM CIDR Block Object"
 }
+
+variable "peering_to_lon" {
+  description = "VPC Peering Connection to London"
+}
