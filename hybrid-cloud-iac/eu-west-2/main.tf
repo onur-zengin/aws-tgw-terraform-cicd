@@ -122,21 +122,24 @@ resource "aws_route_table_association" "private" {
 }
 
 
-resource "aws_instance" "bastion" {
+resource "aws_instance" "bastion-host" {
   ami           = data.aws_ami.amazon_linux.id
   instance_type = "t2.micro"
   subnet_id     = aws_subnet.pub-1a.id
-  vpc_security_group_ids = [ aws_security_group.sg.id ]
+  vpc_security_group_ids = [ aws_security_group.public_sg.id ]
+  key_name = aws_key_pair.bsthost1.id
 
   tags = {
     Name = "tf_bastion"
   }
 }
 
-resource "aws_instance" "host-1" {
+resource "aws_instance" "prv-host-1" {
   ami           = data.aws_ami.amazon_linux.id
   instance_type = "t2.micro"
   subnet_id     = aws_subnet.prv-1a.id
+  vpc_security_group_ids = [ aws_security_group.private_sg.id ]
+  key_name = aws_key_pair.prvhost1.id
 
   tags = {
     Name = "tf_host-1"
@@ -144,7 +147,7 @@ resource "aws_instance" "host-1" {
 }
 
 resource "aws_eip" "persistent_ip" {     // persistent public ip for the bastion server
-    instance = aws_instance.bastion.id      
+    instance = aws_instance.bastion-host.id      
     tags = {
         Name = "tf_eip"
     }
@@ -154,12 +157,12 @@ resource "aws_eip" "persistent_ip" {     // persistent public ip for the bastion
 
 locals {
   sgPorts = [22]
-  sgCidrBlocks = ["0.0.0.0/0"]
+  prvCidrBlocks = ["10.0.0.0/8"]
+  theInternet = ["0.0.0.0/0"]
 }
 
-
-resource "aws_security_group" "sg" { 
-    name = "bastion-ssh-access"  // Must be unique within a VPC
+resource "aws_security_group" "public_sg" { 
+    name = "inet-ssh-access"  // Must be unique within a VPC
     vpc_id = aws_vpc.eu-west-2-vpc-1.id // Have to specify this argument when working outside the defaultVPC, otherwise it will go under the defaultVPC
 
     dynamic "ingress" {
@@ -169,7 +172,7 @@ resource "aws_security_group" "sg" {
             from_port = port.value
             to_port = port.value
             protocol = "tcp"
-            cidr_blocks = local.sgCidrBlocks
+            cidr_blocks = local.theInternet
         }
     }
 
@@ -182,6 +185,48 @@ resource "aws_security_group" "sg" {
         from_port = 0
         to_port = 0
         protocol = "-1"
-        cidr_blocks = local.sgCidrBlocks
+        cidr_blocks = local.theInternet
     }
+}
+
+
+resource "aws_security_group" "private_sg" { 
+    name = "private-ssh-access"  // Must be unique within a VPC
+    vpc_id = aws_vpc.eu-west-2-vpc-1.id // Have to specify this argument when working outside the defaultVPC, otherwise it will go under the defaultVPC
+
+    dynamic "ingress" {
+        iterator = port
+        for_each = local.sgPorts
+        content {
+            from_port = port.value
+            to_port = port.value
+            protocol = "tcp"
+            security_groups = [ aws_security_group.public_sg.id ]
+        }
+    }
+
+# accept ICMP type 8 (echo request) from trusted ranges
+    ingress {
+        from_port = 8
+        to_port = 0
+        protocol = "1"
+        security_groups = [ aws_security_group.public_sg.id ]
+    }
+
+    egress {
+        from_port = 0
+        to_port = 0
+        protocol = "-1"
+        cidr_blocks = local.prvCidrBlocks
+    }
+}
+
+resource "aws_key_pair" "bsthost1" {
+  key_name   = "bsthost1"
+  public_key = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlviXRKUki2A6He91594Eihf/J/nG0qvtnEOSuEeQxG9wcGO+WNcxvrmp3/ZIhpOltEGCdcWgn0ClNWPLtCh5AvD+mOGoGhW6SlqdIQcBPL298rBAZOGNX914CbapsFBfQbCSDuVxheSrdV1a/JY+qhA9XdqWfj2eSg9iSQJ9WqY2vJf32vboV6YZs+nMC4MUjU5G22WBpOiVGsvO4LH9I1X6LepUdFo3pPq1cO6vZoCR+xIe1/2o7eaPxntsrBho0WCxkxxEJqn1zRT+S677oXzRE249QX9vn1wHs2yYlM2r/O5sotMQvtIBiMjY6n/9Hc2wTSi+BeJ23mpNtYqfLwIDAQAB"
+}
+
+resource "aws_key_pair" "prvhost1" {
+  key_name   = "prvhost1"
+  public_key = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArCmGRkbDSmKCiMzjmDrdXo7qAkeXVpbxnHjmexG9jqfBn2/v6g1rD3sqg8yKi6nnlG6i8ts1BpJTbcH8CZn1aeGv4sQNhRS1fsmE1sTcRNOI8wwnLHYMCmoWamsfsRAkRoZivVSRzRd4u4+CoZ45f73uhXoMorZLgYdq9YgbIj7ZgquMuymXu8qHFPFIVUzbfkuQM9rzDhxEaaZbiTZ6pJwdCJcvlnxtDs8+adNAmIuoTtRC2PfaGdGWZDm62UIItmeF+1x/aqhq7/K6v0qnA2NAGI7lAT0tk/G06xPR3GQhfIa7IC6Pj4WnkaMJi4Pzn3c1QMdIiX28/ke/aVlspQIDAQAB"
 }

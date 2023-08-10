@@ -116,8 +116,3 @@ module "London" {
   cidr_block = aws_vpc_ipam_pool_cidr.eu-west-2_block
 }
 
-/*
-output "Cal_AZs" {
-  value = module.California.az
-}
-*/
