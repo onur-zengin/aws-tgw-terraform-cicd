@@ -1,16 +1,11 @@
-variable "pool_id" {
-  description = "IPAM Pool ID"
-  type        = string
+variable "vpc_count" {
+  type    = number
+  default = 2
 }
 
-variable "cidr_block" {
-  description = "IPAM CIDR Block Object"
-}
+# AWS recommended design best practice for TGW-attachment subnets is a /28 per-AZ
 
-variable "vpcs" {
-  type = map(any)
-  default = {
-    "vpc-1" = {}
-    "vpc-2" = {}
-  }
+variable "netmask" {
+  type    = number
+  default = 28 
 }

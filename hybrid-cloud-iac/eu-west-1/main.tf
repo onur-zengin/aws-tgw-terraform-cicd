@@ -1,54 +1,118 @@
+terraform {
+  backend "s3" {
+    bucket         = "tfstate-hci"
+    key            = "regional/eu-west-1/main/hci.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+    dynamodb_table = "tfstate-lock-hci"
+  }
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
 provider "aws" {
   region = "eu-west-1"
 }
 
-# collect the most recent AMI for the region that are required for the VPCs and EC2 instances
+# Referencing the global remote backend to extract IPAM regionalPools;
 
-data "aws_ami" "amazon_linux" {
-  most_recent = true
-  filter {
-    name   = "name"
-    values = ["amzn2-ami-kernel-5.10-hvm-2.0.*-x86_64-gp2"]
+data "terraform_remote_state" "ipam" {
+  backend = "s3"
+
+  config = {
+    bucket = "tfstate-hci"
+    key    = "global/main/hci.tfstate"
+    region = "us-east-1"
   }
-  owners = ["amazon"]
 }
 
+# Collect the current region and available AZs;
+
+data "aws_region" "current" {
+}
+
+data "aws_availability_zones" "available" {
+  state = "available"
+
+  filter {
+    name   = "zone-type"
+    values = ["availability-zone"]
+  }
+}
+
+locals {
+
+  # Extract the regional pool_id for the VPC resource block;
+
+  pool_id = data.terraform_remote_state.ipam.outputs.regionalPools[data.aws_region.current.name].ipam_pool_id
+
+  # TGW requires an attachment subnet per-AZ per-VPC.
+  # So, in order to declare all of the subnets with a single resource block; 
+  # we will first flatten the structure to produce a collection, where
+  # we combine the created VPCs and available AZs in the region.
+
+  subnets = flatten([
+    for vpc_key, vpc in aws_vpc.vpcs : [
+      for zone_key, zone in data.aws_availability_zones.available.names : {
+        vpc_id    = vpc.id
+        vpc_name  = vpc.tags.Name
+        vpc_cidr  = vpc.cidr_block
+        newbits   = var.netmask - vpc.ipv4_netmask_length
+        zone_key  = zone_key
+        zone_name = zone
+      }
+    ]
+  ])
+
+}
+
+# In order to deprovision CIDRs all Allocations must be released. 
+# However, allocations created by a VPC can take up to 30 minutes 
+# to be released, prolonging a VPC deletion operation. Also see;
+# https://github.com/hashicorp/terraform-provider-aws/issues/31211
+
+resource "aws_vpc" "vpcs" {
+  count               = var.vpc_count
+  ipv4_ipam_pool_id   = local.pool_id
+  ipv4_netmask_length = 16
+  tags = {
+    Name = "tf-vpc-${count.index}"
+  }
+}
+
+# When you attach a VPC to a transit gateway, you must specify one subnet from
+# each Availability Zone to be used by the transit gateway to route traffic.
+# local.subnets is a tuple of objects, so we must now project it into a map;
+
+resource "aws_subnet" "prvSubnets" {
+  for_each                = { for k, v in local.subnets : k => v }
+  vpc_id                  = each.value.vpc_id
+  availability_zone       = each.value.zone_name
+  cidr_block              = cidrsubnet(each.value.vpc_cidr, each.value.newbits, each.value.zone_key)
+  map_public_ip_on_launch = false // private subnets only
+  tags = {
+    Name = "${each.value.vpc_name}-tgw-${each.value.zone_name}"
+  }
+}
+
+/*
 resource "aws_ec2_transit_gateway" "tgw" {
   description = "regional_tgw"
 }
 
-resource "aws_vpc" "vpcs" {
-  for_each            = var.vpcs
-  ipv4_ipam_pool_id   = var.pool_id
-  ipv4_netmask_length = 16
-  depends_on = [
-    var.cidr_block
-  ]
-  tags = {
-    Name = "tf-${each.key}"
-  }
-}
-
-resource "aws_subnet" "prvSubnets" {
-  for_each                = aws_vpc.vpcs
-  vpc_id                  = each.value.id
-  cidr_block              = cidrsubnet(each.value.cidr_block, 4, 0) // fixme - not shifting any bits since we are creating a single subnet for each VPC. To be updated later
-  map_public_ip_on_launch = false                                   // private subnets only
-  tags = {
-    Name = "tf-${cidrsubnet(each.value.cidr_block, 4, 0)}"
-  }
-}
-
 resource "aws_ec2_transit_gateway_vpc_attachment" "tgwAttachments" {
   for_each           = { for k, v in aws_subnet.prvSubnets : k => v } // potential fixme - retest this with multiple subnets in a VPC
-  subnet_ids         = [each.value.id]
+  subnet_ids         = [ each.value.id ]
   transit_gateway_id = aws_ec2_transit_gateway.tgw.id
   vpc_id             = each.value.vpc_id
 }
 
-# Must attach the VPC (in question) to the TGW prior to add a route to the table. 
+# Must attach the VPC in question to the TGW prior to adding a route to the table
 
-/*
 resource "aws_route_table" "prvRouteTables" {
   for_each = aws_vpc.vpcs
   vpc_id   = each.value.id
@@ -59,75 +123,28 @@ resource "aws_route_table" "prvRouteTables" {
   tags = {
     Name = "tf-${each.key}"
   }
-  depends_on = [ aws_ec2_transit_gateway_vpc_attachment.tgwAttachments[each] ]
-}
-*/
-output "test_output" {
-  #value = { for k, v in aws_vpc.vpcs : k => v }
-  value = { for k, v in aws_subnet.prvSubnets : k => v }
+  depends_on = [ aws_ec2_transit_gateway_vpc_attachment.tgwAttachments ]
 }
 
-/*
-  ~ test_output = {
-      + vpc-1 = {
-          + arn                                            = "arn:aws:ec2:eu-west-1:747433832000:subnet/subnet-016379940f06c6c17"
-          + assign_ipv6_address_on_creation                = false
-          + availability_zone                              = "eu-west-1c"
-          + availability_zone_id                           = "euw1-az3"
-          + cidr_block                                     = "10.50.0.0/20"
-          + customer_owned_ipv4_pool                       = ""
-          + enable_dns64                                   = false
-          + enable_lni_at_device_index                     = 0
-          + enable_resource_name_dns_a_record_on_launch    = false
-          + enable_resource_name_dns_aaaa_record_on_launch = false
-          + id                                             = "subnet-016379940f06c6c17"
-          + ipv6_cidr_block                                = ""
-          + ipv6_cidr_block_association_id                 = ""
-          + ipv6_native                                    = false
-          + map_customer_owned_ip_on_launch                = false
-          + map_public_ip_on_launch                        = false
-          + outpost_arn                                    = ""
-          + owner_id                                       = "747433832000"
-          + private_dns_hostname_type_on_launch            = "ip-name"
-          + tags                                           = {
-              + Name = "tf-10.50.0.0/20"
-            }
-          + tags_all                                       = {
-              + Name = "tf-10.50.0.0/20"
-            }
-          + timeouts                                       = null
-          + vpc_id                                         = "vpc-0cc80728de0695a21"
-        }
-      + vpc-2 = {
-          + arn                                            = "arn:aws:ec2:eu-west-1:747433832000:subnet/subnet-02eece771f0a99e03"
-          + assign_ipv6_address_on_creation                = false
-          + availability_zone                              = "eu-west-1a"
-          + availability_zone_id                           = "euw1-az1"
-          + cidr_block                                     = "10.51.0.0/20"
-          + customer_owned_ipv4_pool                       = ""
-          + enable_dns64                                   = false
-          + enable_lni_at_device_index                     = 0
-          + enable_resource_name_dns_a_record_on_launch    = false
-          + enable_resource_name_dns_aaaa_record_on_launch = false
-          + id                                             = "subnet-02eece771f0a99e03"
-          + ipv6_cidr_block                                = ""
-          + ipv6_cidr_block_association_id                 = ""
-          + ipv6_native                                    = false
-          + map_customer_owned_ip_on_launch                = false
-          + map_public_ip_on_launch                        = false
-          + outpost_arn                                    = ""
-          + owner_id                                       = "747433832000"
-          + private_dns_hostname_type_on_launch            = "ip-name"
-          + tags                                           = {
-              + Name = "tf-10.51.0.0/20"
-            }
-          + tags_all                                       = {
-              + Name = "tf-10.51.0.0/20"
-            }
-          + timeouts                                       = null
-          + vpc_id                                         = "vpc-0651be7d75ba14747"
-        }
-    }
+resource "aws_route_table_association" "private" {
+  subnet_id      = aws_subnet.prv-1c.id
+  route_table_id = aws_route_table.privateRouteTable.id
+}
 
-──────────────────────────────────────────────────────────────────────────────────────────
+resource "aws_vpc_endpoint" "eps" {
+  vpc_id            = aws_vpc.main.id
+  service_name      = "com.amazonaws.us-west-2.ec2"
+  vpc_endpoint_type = "Interface"
+
+  security_group_ids = [
+    aws_security_group.sg1.id,
+  ]
+
+  private_dns_enabled = true
+}
 */
+
+
+
+
+
