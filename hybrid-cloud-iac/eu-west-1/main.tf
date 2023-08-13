@@ -99,19 +99,24 @@ resource "aws_subnet" "prvSubnets" {
   }
 }
 
-/*
+
 resource "aws_ec2_transit_gateway" "tgw" {
   description = "regional_tgw"
 }
 
+# Even though a TGW should be associated with one subnet per-AZ,
+# the tgwAttachments resource block is called for an entire VPC.
+# Therefore, the initial for_each loop should iterate through the VPCs,
+# while the list of subnet_ids is built with another for expression; 
+
 resource "aws_ec2_transit_gateway_vpc_attachment" "tgwAttachments" {
-  for_each           = { for k, v in aws_subnet.prvSubnets : k => v } // potential fixme - retest this with multiple subnets in a VPC
-  subnet_ids         = [ each.value.id ]
+  for_each           = { for k, vpc in aws_vpc.vpcs : k => vpc } 
+  subnet_ids         = [ for subnet in aws_subnet.prvSubnets : subnet.id if subnet.vpc_id == each.value.id ]
   transit_gateway_id = aws_ec2_transit_gateway.tgw.id
-  vpc_id             = each.value.vpc_id
+  vpc_id             = each.value.id
 }
 
-# Must attach the VPC in question to the TGW prior to adding a route to the table
+/*
 
 resource "aws_route_table" "prvRouteTables" {
   for_each = aws_vpc.vpcs
@@ -123,6 +128,8 @@ resource "aws_route_table" "prvRouteTables" {
   tags = {
     Name = "tf-${each.key}"
   }
+
+  # Must attach the VPC in question to the TGW prior to adding a route to the table
   depends_on = [ aws_ec2_transit_gateway_vpc_attachment.tgwAttachments ]
 }
 
@@ -147,4 +154,40 @@ resource "aws_vpc_endpoint" "eps" {
 
 
 
+/*
 
+{ for k, v in aws_subnet.prvSubnets : k => v.id if v.vpc_id == "vpc-00e1a3874b6cc70e0"}
+{
+  "0" = "subnet-0ae8a6d794f83a0db"
+  "1" = "subnet-00c3a13aaff697a94"
+  "2" = "subnet-0076e1f07bc029ea5"
+}
+
+ { for k, v in local.subnets : k => v if v.vpc_id == "vpc-00e1a3874b6cc70e0"}
+{
+  "0" = {
+    "newbits" = 12
+    "vpc_cidr" = "10.49.0.0/16"
+    "vpc_id" = "vpc-00e1a3874b6cc70e0"
+    "vpc_name" = "tf-vpc-0"
+    "zone_key" = 0
+    "zone_name" = "eu-west-1a"
+  }
+  "1" = {
+    "newbits" = 12
+    "vpc_cidr" = "10.49.0.0/16"
+    "vpc_id" = "vpc-00e1a3874b6cc70e0"
+    "vpc_name" = "tf-vpc-0"
+    "zone_key" = 1
+    "zone_name" = "eu-west-1b"
+  }
+  "2" = {
+    "newbits" = 12
+    "vpc_cidr" = "10.49.0.0/16"
+    "vpc_id" = "vpc-00e1a3874b6cc70e0"
+    "vpc_name" = "tf-vpc-0"
+    "zone_key" = 2
+    "zone_name" = "eu-west-1c"
+  }
+}
+*/
