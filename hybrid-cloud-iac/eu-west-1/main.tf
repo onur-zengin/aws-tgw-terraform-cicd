@@ -67,7 +67,6 @@ locals {
       }
     ]
   ])
-
 }
 
 # In order to deprovision CIDRs all Allocations must be released. 
@@ -89,7 +88,7 @@ resource "aws_vpc" "vpcs" {
 # local.subnets is a tuple of objects, so we must now project it into a map;
 
 resource "aws_subnet" "prvSubnets" {
-  for_each                = { for k, v in local.subnets : k => v }
+  for_each                = { for key, subnet in local.subnets : key => subnet }
   vpc_id                  = each.value.vpc_id
   availability_zone       = each.value.zone_name
   cidr_block              = cidrsubnet(each.value.vpc_cidr, each.value.newbits, each.value.zone_key)
@@ -98,7 +97,6 @@ resource "aws_subnet" "prvSubnets" {
     Name = "${each.value.vpc_name}-tgw-${each.value.zone_name}"
   }
 }
-
 
 resource "aws_ec2_transit_gateway" "tgw" {
   description = "regional_tgw"
@@ -110,34 +108,38 @@ resource "aws_ec2_transit_gateway" "tgw" {
 # while the list of subnet_ids is built with another for expression; 
 
 resource "aws_ec2_transit_gateway_vpc_attachment" "tgwAttachments" {
-  for_each           = { for k, vpc in aws_vpc.vpcs : k => vpc } 
+  for_each           = { for key, vpc in aws_vpc.vpcs : key => vpc } 
   subnet_ids         = [ for subnet in aws_subnet.prvSubnets : subnet.id if subnet.vpc_id == each.value.id ]
   transit_gateway_id = aws_ec2_transit_gateway.tgw.id
   vpc_id             = each.value.id
 }
 
-/*
+# As before, aws_vpc.vpcs is a tuple so we must project it into a map;
 
 resource "aws_route_table" "prvRouteTables" {
-  for_each = aws_vpc.vpcs
+  for_each = { for key, vpc in aws_vpc.vpcs : key => vpc } 
   vpc_id   = each.value.id
   route {
     cidr_block         = "0.0.0.0/0"
     transit_gateway_id = aws_ec2_transit_gateway.tgw.id
   }
   tags = {
-    Name = "tf-${each.key}"
+    Name = "tf-default-route-to-tgw"
   }
-
-  # Must attach the VPC in question to the TGW prior to adding a route to the table
+  # A VPC in question must be attached to a TGW prior to adding routes referencing the gateway in the VPC table
   depends_on = [ aws_ec2_transit_gateway_vpc_attachment.tgwAttachments ]
 }
 
+# selfnote - Working with VPC main route table might make the following association easier
+
+/*
 resource "aws_route_table_association" "private" {
-  subnet_id      = aws_subnet.prv-1c.id
-  route_table_id = aws_route_table.privateRouteTable.id
+  for_each = { for key, subnet in aws_subnet.prvSubnets: key => subnet}
+  subnet_id      = each.value.id
+  #route_table_id = aws_route_table.privateRouteTable.id
 }
 
+/*
 resource "aws_vpc_endpoint" "eps" {
   vpc_id            = aws_vpc.main.id
   service_name      = "com.amazonaws.us-west-2.ec2"
@@ -148,46 +150,5 @@ resource "aws_vpc_endpoint" "eps" {
   ]
 
   private_dns_enabled = true
-}
-*/
-
-
-
-
-/*
-
-{ for k, v in aws_subnet.prvSubnets : k => v.id if v.vpc_id == "vpc-00e1a3874b6cc70e0"}
-{
-  "0" = "subnet-0ae8a6d794f83a0db"
-  "1" = "subnet-00c3a13aaff697a94"
-  "2" = "subnet-0076e1f07bc029ea5"
-}
-
- { for k, v in local.subnets : k => v if v.vpc_id == "vpc-00e1a3874b6cc70e0"}
-{
-  "0" = {
-    "newbits" = 12
-    "vpc_cidr" = "10.49.0.0/16"
-    "vpc_id" = "vpc-00e1a3874b6cc70e0"
-    "vpc_name" = "tf-vpc-0"
-    "zone_key" = 0
-    "zone_name" = "eu-west-1a"
-  }
-  "1" = {
-    "newbits" = 12
-    "vpc_cidr" = "10.49.0.0/16"
-    "vpc_id" = "vpc-00e1a3874b6cc70e0"
-    "vpc_name" = "tf-vpc-0"
-    "zone_key" = 1
-    "zone_name" = "eu-west-1b"
-  }
-  "2" = {
-    "newbits" = 12
-    "vpc_cidr" = "10.49.0.0/16"
-    "vpc_id" = "vpc-00e1a3874b6cc70e0"
-    "vpc_name" = "tf-vpc-0"
-    "zone_key" = 2
-    "zone_name" = "eu-west-1c"
-  }
 }
 */
