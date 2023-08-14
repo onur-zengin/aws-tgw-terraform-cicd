@@ -11,7 +11,7 @@ variable "netmask" {
 }
 
 variable "prvSgPorts" {
-  type = list(number)
+  type    = list(number)
   default = [22, 80, 443, 3306]
 }
 

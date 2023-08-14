@@ -66,13 +66,13 @@ data "aws_ami" "amazon_linux" {
 
 
 
-locals { 
+locals {
 
   # Extract the root_cidr to define private blocks for the SG allow lists
   # and the regional pool_id to be allocated to the VPC resource block;
 
   prv_cidr = data.terraform_remote_state.ipam.outputs.rootCidr
-  pool_id = data.terraform_remote_state.ipam.outputs.regionalPools[data.aws_region.current.name].ipam_pool_id
+  pool_id  = data.terraform_remote_state.ipam.outputs.regionalPools[data.aws_region.current.name].ipam_pool_id
 
   # TGW requires an attachment subnet per-AZ per-VPC.
   # So, in order to declare all of the subnets with a single resource block; 
@@ -219,8 +219,7 @@ resource "aws_instance" "prvHosts" {
   subnet_id              = each.value.id
   ami                    = data.aws_ami.amazon_linux.id
   instance_type          = "t2.micro"
-  #vpc_security_group_ids = [aws_security_group.private_sg.id]
-
+  vpc_security_group_ids = [for entry in local.security_groups : entry.sg_id if entry.subnet_id == each.value.id]
   tags = {
     Name = "tf_host-${each.key}"
   }
