@@ -64,8 +64,6 @@ data "aws_ami" "amazon_linux" {
 }
 
 
-
-
 locals {
 
   # Extract the root_cidr to define private blocks for the SG allow lists

@@ -208,8 +208,6 @@ resource "aws_route_table_association" "associations" {
   subnet_id      = each.value.subnet_id
   route_table_id = each.value.rt_id
 
-  depends_on = [aws_route_table.prvRouteTables]
-
 }
 
 

@@ -159,8 +159,6 @@ resource "aws_eip" "persistent_ip" {     // persistent public ip for the bastion
 }
 
 
-
-
 resource "aws_security_group" "public_sg" { 
     name = "inet-ssh-access"  // Must be unique within a VPC
     vpc_id = aws_vpc.eu-west-2-vpc-1.id // Have to specify this argument when working outside the defaultVPC, otherwise it will go under the defaultVPC
