@@ -1,4 +1,5 @@
 terraform {
+
   backend "s3" {
     bucket         = "tfstate-hci"
     key            = "regional/eu-west-1/main/hci.tfstate"
@@ -6,6 +7,7 @@ terraform {
     encrypt        = true
     dynamodb_table = "tfstate-lock-hci"
   }
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -15,12 +17,16 @@ terraform {
 }
 
 provider "aws" {
+
   region = "eu-west-1"
+
 }
+
 
 # Referencing the global remote backend to extract IPAM regionalPools;
 
 data "terraform_remote_state" "ipam" {
+
   backend = "s3"
 
   config = {
@@ -33,9 +39,11 @@ data "terraform_remote_state" "ipam" {
 # Collect the current region and available AZs;
 
 data "aws_region" "current" {
+
 }
 
 data "aws_availability_zones" "available" {
+
   state = "available"
 
   filter {
@@ -43,6 +51,7 @@ data "aws_availability_zones" "available" {
     values = ["availability-zone"]
   }
 }
+
 
 locals {
 
@@ -52,8 +61,8 @@ locals {
 
   # TGW requires an attachment subnet per-AZ per-VPC.
   # So, in order to declare all of the subnets with a single resource block; 
-  # we will first flatten the structure to produce a collection, where
-  # we combine the created VPCs and available AZs in the region.
+  # we will first flatten the structure to produce a collection, where we
+  # combine the created VPCs and available AZs in the region.
 
   subnets = flatten([
     for vpc_key, vpc in aws_vpc.vpcs : [
@@ -67,76 +76,113 @@ locals {
       }
     ]
   ])
+
+  # We need another collection where the subnets and route_tables
+  # are associated with each other through the VPCs they belong to.
+  # Extracting main/default route_table from the VPCs in a single loop 
+  # could also be possible, but avoided working with default RTs to
+  # maintain adaptability to different VPC environments. 
+
+  route_tables = flatten([
+    for subnet_key, subnet in aws_subnet.prvSubnets : [
+      for rt_key, rt in aws_route_table.prvRouteTables : {
+        subnet_id = subnet.id
+        rt_id     = rt.id
+      }
+      if subnet.vpc_id == rt.vpc_id
+    ]
+  ])
+
 }
 
-# In order to deprovision CIDRs all Allocations must be released. 
+
+# In order to deprovision CIDRs all allocations must be released. 
 # However, allocations created by a VPC can take up to 30 minutes 
 # to be released, prolonging a VPC deletion operation. Also see;
 # https://github.com/hashicorp/terraform-provider-aws/issues/31211
 
 resource "aws_vpc" "vpcs" {
+
   count               = var.vpc_count
   ipv4_ipam_pool_id   = local.pool_id
   ipv4_netmask_length = 16
   tags = {
     Name = "tf-vpc-${count.index}"
   }
+
 }
 
-# When you attach a VPC to a transit gateway, you must specify one subnet from
-# each Availability Zone to be used by the transit gateway to route traffic.
-# local.subnets is a tuple of objects, so we must now project it into a map;
+
+# When you attach a VPC to a TGW, you must specify one subnet from
+# each Availability Zone to be used by the TGW to route traffic.
 
 resource "aws_subnet" "prvSubnets" {
+
+  # local.subnets is a tuple of objects, so we must now project it into a map;
   for_each                = { for key, subnet in local.subnets : key => subnet }
   vpc_id                  = each.value.vpc_id
   availability_zone       = each.value.zone_name
   cidr_block              = cidrsubnet(each.value.vpc_cidr, each.value.newbits, each.value.zone_key)
   map_public_ip_on_launch = false // private subnets only
+
   tags = {
     Name = "${each.value.vpc_name}-tgw-${each.value.zone_name}"
   }
+
 }
 
+
 resource "aws_ec2_transit_gateway" "tgw" {
+
   description = "regional_tgw"
+
 }
+
 
 # Even though a TGW should be associated with one subnet per-AZ,
 # the tgwAttachments resource block is called for an entire VPC.
-# Therefore, the initial for_each loop should iterate through the VPCs,
-# while the list of subnet_ids is built with another for expression; 
+# Therefore, the initial for_each loop should iterate through the 
+# existing VPCs, while the list of subnet_ids is built with another 
+# for expression afterwards; 
 
 resource "aws_ec2_transit_gateway_vpc_attachment" "tgwAttachments" {
-  for_each           = { for key, vpc in aws_vpc.vpcs : key => vpc } 
-  subnet_ids         = [ for subnet in aws_subnet.prvSubnets : subnet.id if subnet.vpc_id == each.value.id ]
+
+  for_each           = { for key, vpc in aws_vpc.vpcs : key => vpc }
+  subnet_ids         = [for subnet in aws_subnet.prvSubnets : subnet.id if subnet.vpc_id == each.value.id]
   transit_gateway_id = aws_ec2_transit_gateway.tgw.id
   vpc_id             = each.value.id
+
 }
 
-# As before, aws_vpc.vpcs is a tuple so we must project it into a map;
 
 resource "aws_route_table" "prvRouteTables" {
-  for_each = { for key, vpc in aws_vpc.vpcs : key => vpc } 
+
+  # As before, aws_vpc.vpcs is a tuple so we must project it into a map;
+  for_each = { for key, vpc in aws_vpc.vpcs : key => vpc }
   vpc_id   = each.value.id
+
   route {
     cidr_block         = "0.0.0.0/0"
     transit_gateway_id = aws_ec2_transit_gateway.tgw.id
   }
+
   tags = {
     Name = "tf-default-route-to-tgw"
   }
-  # A VPC in question must be attached to a TGW prior to adding routes referencing the gateway in the VPC table
-  depends_on = [ aws_ec2_transit_gateway_vpc_attachment.tgwAttachments ]
+
+  # A VPC must be attached to a TGW prior to adding routes referencing 
+  # the gateway in its route table;
+  depends_on = [aws_ec2_transit_gateway_vpc_attachment.tgwAttachments]
+
 }
 
-# selfnote - Working with VPC main route table might make the following association easier
 
-/*
-resource "aws_route_table_association" "private" {
-  for_each = { for key, subnet in aws_subnet.prvSubnets: key => subnet}
-  subnet_id      = each.value.id
-  #route_table_id = aws_route_table.privateRouteTable.id
+resource "aws_route_table_association" "associations" {
+
+  for_each       = { for key, entry in local.route_tables : key => entry }
+  subnet_id      = each.value.subnet_id
+  route_table_id = each.value.rt_id
+
 }
 
 /*
@@ -152,3 +198,5 @@ resource "aws_vpc_endpoint" "eps" {
   private_dns_enabled = true
 }
 */
+
+

@@ -7,5 +7,5 @@ variable "vpc_count" {
 
 variable "netmask" {
   type    = number
-  default = 28 
+  default = 28
 }
