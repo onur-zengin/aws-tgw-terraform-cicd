@@ -260,3 +260,29 @@ resource "aws_security_group" "prvSGs" {
   }
 }
 
+resource "aws_ec2_transit_gateway_peering_attachment" "dub-fra" {
+
+  peer_region             = "eu-central-1"
+  peer_transit_gateway_id = local.fra_tgw_id
+  transit_gateway_id      = aws_ec2_transit_gateway.tgw.id
+
+  tags = {
+    Name = "TGW Peering Requestor"
+  }
+  #depends_on = [  ]
+}
+
+data "terraform_remote_state" "fra" {
+
+  backend = "s3"
+
+  config = {
+    bucket = "tfstate-hci"
+    key    = "regional/eu-central-1/main/hci.tfstate"
+    region = "us-east-1"
+  }
+}
+
+locals {
+    fra_tgw_id = data.terraform_remote_state.fra.outputs.tgw_id
+}

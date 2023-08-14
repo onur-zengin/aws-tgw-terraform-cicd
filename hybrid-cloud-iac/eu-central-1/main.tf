@@ -258,3 +258,28 @@ resource "aws_security_group" "prvSGs" {
   }
 }
 
+
+
+resource "aws_ec2_transit_gateway_peering_attachment_accepter" "fra-dub" {
+  transit_gateway_attachment_id = local.tgw_peering_dub-fra
+
+  tags = {
+    Name = "TGW Peering Acceptor"
+  }
+}
+
+
+data "terraform_remote_state" "dub" {
+
+  backend = "s3"
+
+  config = {
+    bucket = "tfstate-hci"
+    key    = "regional/eu-west-1/main/hci.tfstate"
+    region = "us-east-1"
+  }
+}
+
+locals {
+    tgw_peering_dub-fra = data.terraform_remote_state.dub.outputs.tgw_peering_dub-fra
+}
