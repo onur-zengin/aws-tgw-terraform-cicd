@@ -36,7 +36,7 @@ data "terraform_remote_state" "ipam" {
   }
 }
 
-# Collect the current region and available AZs;
+# Collect the current region, available AZs and the most recent AMI;
 
 data "aws_region" "current" {
 
@@ -52,11 +52,26 @@ data "aws_availability_zones" "available" {
   }
 }
 
+data "aws_ami" "amazon_linux" {
 
-locals {
+  most_recent = true
 
-  # Extract the regional pool_id for the VPC resource block;
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-kernel-5.10-hvm-2.0.*-x86_64-gp2"]
+  }
+  owners = ["amazon"]
+}
 
+
+
+
+locals { 
+
+  # Extract the root_cidr to define private blocks for the SG allow lists
+  # and the regional pool_id to be allocated to the VPC resource block;
+
+  prv_cidr = data.terraform_remote_state.ipam.outputs.rootCidr
   pool_id = data.terraform_remote_state.ipam.outputs.regionalPools[data.aws_region.current.name].ipam_pool_id
 
   # TGW requires an attachment subnet per-AZ per-VPC.
@@ -90,6 +105,16 @@ locals {
         rt_id     = rt.id
       }
       if subnet.vpc_id == rt.vpc_id
+    ]
+  ])
+
+  security_groups = flatten([
+    for subnet_key, subnet in aws_subnet.prvSubnets : [
+      for sg_key, sg in aws_security_group.prvSGs : {
+        subnet_id = subnet.id
+        sg_id     = sg.id
+      }
+      if subnet.vpc_id == sg.vpc_id
     ]
   ])
 
@@ -185,18 +210,52 @@ resource "aws_route_table_association" "associations" {
 
 }
 
-/*
-resource "aws_vpc_endpoint" "eps" {
-  vpc_id            = aws_vpc.main.id
-  service_name      = "com.amazonaws.us-west-2.ec2"
-  vpc_endpoint_type = "Interface"
 
-  security_group_ids = [
-    aws_security_group.sg1.id,
-  ]
+# Create an EC2 host per-subnet for connectivity testing;
 
-  private_dns_enabled = true
+resource "aws_instance" "prvHosts" {
+
+  for_each               = { for key, subnet in aws_subnet.prvSubnets : key => subnet }
+  subnet_id              = each.value.id
+  ami                    = data.aws_ami.amazon_linux.id
+  instance_type          = "t2.micro"
+  #vpc_security_group_ids = [aws_security_group.private_sg.id]
+
+  tags = {
+    Name = "tf_host-${each.key}"
+  }
 }
-*/
 
+
+resource "aws_security_group" "prvSGs" {
+
+  for_each = { for key, vpc in aws_vpc.vpcs : key => vpc }
+  vpc_id   = each.value.id
+
+  dynamic "ingress" {
+    iterator = port
+    for_each = var.prvSgPorts
+    content {
+      from_port   = port.value
+      to_port     = port.value
+      protocol    = "tcp"
+      cidr_blocks = [local.prv_cidr]
+    }
+  }
+
+  # accept ICMP type 8 (echo request) from private ranges
+  ingress {
+    from_port   = 8
+    to_port     = 0
+    protocol    = "1"
+    cidr_blocks = [local.prv_cidr]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [local.prv_cidr]
+  }
+}
 
