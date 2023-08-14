@@ -17,7 +17,7 @@ variable "root_cidr" {
 
 variable "operating_regions" {
   type    = list(any)
-  default = ["us-west-1", "eu-west-2", "eu-west-1"]
+  default = ["us-west-1", "eu-west-2", "eu-west-1", "eu-central-1"]
 }
 
 variable "regional_pool_size" {

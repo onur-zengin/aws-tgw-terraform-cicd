@@ -2,7 +2,7 @@ terraform {
 
   backend "s3" {
     bucket         = "tfstate-hci"
-    key            = "regional/eu-west-1/main/hci.tfstate"
+    key            = "regional/eu-central-1/main/hci.tfstate"
     region         = "us-east-1"
     encrypt        = true
     dynamodb_table = "tfstate-lock-hci"
@@ -18,7 +18,7 @@ terraform {
 
 provider "aws" {
 
-  region = "eu-west-1"
+  region = var.region
 
 }
 
@@ -207,8 +207,6 @@ resource "aws_route_table_association" "associations" {
   for_each       = { for key, entry in local.route_tables : key => entry }
   subnet_id      = each.value.subnet_id
   route_table_id = each.value.rt_id
-
-  depends_on = [aws_route_table.prvRouteTables]
 
 }
 
