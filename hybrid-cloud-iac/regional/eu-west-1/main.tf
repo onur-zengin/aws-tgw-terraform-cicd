@@ -158,7 +158,7 @@ resource "aws_subnet" "prvSubnets" {
 resource "aws_ec2_transit_gateway" "tgw" {
 
   description = "regional_tgw"
-  amazon_side_asn = 65000 // increment (up to 65534) while looping through regions
+  amazon_side_asn = 65000 // fixme - increment (up to 65534) while looping through regions
   auto_accept_shared_attachments = enable // test enabling this is there a security risk?
   default_route_table_association = enable
 
