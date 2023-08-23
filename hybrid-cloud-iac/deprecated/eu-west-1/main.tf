@@ -159,8 +159,8 @@ resource "aws_ec2_transit_gateway" "tgw" {
 
   description = "regional_tgw"
   amazon_side_asn = 65000 // fixme - increment (up to 65534) while looping through regions
-  auto_accept_shared_attachments = enable // test enabling this is there a security risk?
-  default_route_table_association = enable
+  #auto_accept_shared_attachments = enable // test enabling this is there a security risk?
+  #default_route_table_association = enable
 
 }
 
@@ -262,7 +262,8 @@ resource "aws_security_group" "prvSGs" {
 resource "aws_ec2_transit_gateway_peering_attachment" "dub-fra" {
 
   peer_region             = "eu-central-1"
-  peer_transit_gateway_id = local.fra_tgw_id
+  peer_transit_gateway_id = "tgw-0109d57047eaec82c"
+  #peer_transit_gateway_id = local.fra_tgw_id
   transit_gateway_id      = aws_ec2_transit_gateway.tgw.id
 
   tags = {
@@ -281,7 +282,8 @@ data "terraform_remote_state" "fra" {
     region = "us-east-1"
   }
 }
-
+/*
 locals {
     fra_tgw_id = data.terraform_remote_state.fra.outputs.tgw_id
 }
+*/
