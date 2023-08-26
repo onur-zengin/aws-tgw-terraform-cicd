@@ -5,5 +5,5 @@ terraform {
     region         = "us-east-1"
     dynamodb_table = "tfstate-lock-hci"
     encrypt        = true
-  }  
+  }
 }

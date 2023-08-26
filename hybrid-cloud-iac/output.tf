@@ -1,3 +1,8 @@
+# [do-not-remove] required by the VPC module to extract regional IPAM pools
+output "ipam" {
+    value = module.ipam.regionalPools
+}
+
 /*
 output "region" {
   value = local.region.name
@@ -5,11 +10,6 @@ output "region" {
 
 output "location" {
   value = local.region.description
-}
-*/
-/*
-output "ipam" {
-    value = module.ipam.regionalPools
 }
 */
 /*

@@ -2,7 +2,7 @@
 
 locals {
 
-  #region = data.aws_region.current -- fixme - might replace var.cicd_region with this
+  #region = data.aws_region.current -- fixme - replace var.cicd_region with this
   
   # Have to ensure that current working region is included in the 
   # operating_regions for IPAM;
