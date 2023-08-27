@@ -1,5 +1,5 @@
 # Hybrid Cloud IaC
 
-![cicd](https://github.com/onur-zengin/yamazaki/assets/10590811/0ded56e4-edbe-4bda-8b00-63147a10a0ad)
+![tgw_octo_cicd](https://github.com/onur-zengin/yamazaki/assets/10590811/fdc2bb4b-688f-4be6-9250-3b53a6082f07)
 
-WIP (Work In Progress) - AWS Multi-Region Hybrid Cloud infrastructure project using CI/CD pipelines, w/ TGWs for inter-region connectivity & IPAM for centralized pool management
+WIP (Work In Progress) - AWS Hybrid Cloud infrastructure project using CI/CD pipelines, w/ TGWs for inter-region connectivity & VPC IPAM for centralized pool management.
